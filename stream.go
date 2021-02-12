@@ -19,19 +19,26 @@ const (
 	generationsTableName = "system_distributed.cdc_streams_descriptions"
 )
 
-// TODO(corver): Add support for custom consistency.
-
 // NewStream returns a new Stream.
-func NewStream(session *gocql.Session, keyspace, table string) *Stream {
-	return &Stream{
+func NewStream(session *gocql.Session, keyspace, table string, opts ...option) *Stream {
+	s := Stream{
+		options:  defaultOptions(),
 		keyspace: keyspace,
 		table:    table,
 		session:  session,
 	}
+
+	for _, opt := range opts {
+		opt(&s.options)
+	}
+
+	return &s
 }
 
 // Stream represents a scyllaDB CDC table stream.
 type Stream struct {
+	options
+
 	//  keyspace is the name of the CQL keyspace containing the table.
 	keyspace string
 
@@ -92,15 +99,17 @@ func (s *Stream) Stream(ctx context.Context, cursorStr string,
 			err    error
 		)
 		for {
-			cur, ok, err = maybeBumpGeneration(ctx, s.session, cur)
+			cur, ok, err = maybeBumpGeneration(ctx, s.session, s.Consistency, cur)
 			if err != nil {
 				// NoReturnErr:
 				return errors.Wrap(err, "bump generation")
 			} else if ok || len(shards) == 0 {
-				shards, err = getShards(ctx, s.session, cur.Generation)
+				shards, err = getShards(ctx, s.session, s.Consistency, cur.Generation)
 				if err != nil {
 					return errors.Wrap(err, "get shards")
 				}
+
+				shards = sliceShards(shards, s.ShardM, s.ShardN)
 			}
 
 			window := calcWindow(o.Lag)
@@ -119,7 +128,7 @@ func (s *Stream) Stream(ctx context.Context, cursorStr string,
 				gen:         cur.Generation,
 				from:        cur.Time,
 				to:          to,
-				consistency: gocql.One,
+				consistency: s.Consistency,
 			}
 
 			err := queryShards(ctx, s.session, shards, req, sc.eventChan)
@@ -138,16 +147,31 @@ func (s *Stream) Stream(ctx context.Context, cursorStr string,
 	return sc, nil
 }
 
+// sliceShards returns a consistent mth-of-n subset of shards.
+func sliceShards(shards [][]streamID, m int, n int) [][]streamID {
+	if n < 2 {
+		return shards
+	}
+
+	var res [][]streamID
+	for i, shard := range shards {
+		if n%i == m {
+			res = append(res, shard)
+		}
+	}
+	return res
+}
+
 // maybeBumpGeneration returns either the provided cursor and false or
 // the next generation's cursor and true.
-func maybeBumpGeneration(ctx context.Context, session *gocql.Session, cur cursor) (cursor, bool, error) {
+func maybeBumpGeneration(ctx context.Context, session *gocql.Session, consistency gocql.Consistency, cur cursor) (cursor, bool, error) {
 	if time.Since(cur.UpdatedAt) < generationPoll {
 		return cur, false, nil
 	}
 
 	cur.UpdatedAt = time.Now()
 
-	iter := session.Query("SELECT time FROM " + generationsTableName).WithContext(ctx).Consistency(gocql.One).Iter()
+	iter := session.Query("SELECT time FROM " + generationsTableName).WithContext(ctx).Consistency(consistency).Iter()
 
 	var (
 		nextGen time.Time

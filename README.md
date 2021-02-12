@@ -74,7 +74,6 @@ type eventID struct {
    are long that.
    
 ### TODO
- - Add support for `m-of-n` sharded reflex streams for improved performance. `rscylla.WithShard(m,n int)`
  - Add support for base row data in the `Metadata` field depending on `type`.
  - Add support for easier lookup of base table entry from `ForeignID`.
  - Add support for business logic defined `Type` fields.

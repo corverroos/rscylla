@@ -19,7 +19,12 @@ import (
 // This is especially handy when streaming from the tail of a log. Since rscylla queries
 // time windows sequentially, streaming from an zero cursor (DB create time) results in
 // initial delays.
-func GetCursor(ctx context.Context, session *gocql.Session, keyspace, table string, from time.Time) (string, error) {
+func GetCursor(ctx context.Context, session *gocql.Session, keyspace, table string, from time.Time, opts ...option) (string, error) {
+	o := defaultOptions()
+	for _, opt := range opts {
+		opt(&o)
+	}
+
 	if from.IsZero() {
 		// Zero times not supported
 		from = time.Unix(0, 0)
@@ -31,7 +36,7 @@ func GetCursor(ctx context.Context, session *gocql.Session, keyspace, table stri
 		return "", err
 	}
 
-	shards, err := getShards(ctx, session, gen)
+	shards, err := getShards(ctx, session, o.Consistency, gen)
 	if err != nil {
 		return "", err
 	}
@@ -52,7 +57,7 @@ func GetCursor(ctx context.Context, session *gocql.Session, keyspace, table stri
 		from:        from,
 		to:          time.Now(),
 		limit:       1,
-		consistency: gocql.One,
+		consistency: o.Consistency,
 	}
 
 	err = queryShards(ctx, session, shards, req, ch)

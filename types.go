@@ -1,6 +1,10 @@
 package rscylla
 
-import "time"
+import (
+	"time"
+
+	"github.com/gocql/gocql"
+)
 
 // OperationType corresponds to the cdc$operation column in CDC log, and
 // describes the type of the operation given row represents.
@@ -25,6 +29,35 @@ const (
 	RangeDeleteEndExclusive   OperationType = 8
 	PostImage                 OperationType = 9
 )
+
+type options struct {
+	Consistency    gocql.Consistency
+	ShardM, ShardN int
+}
+
+type option func(*options)
+
+// WithConsistency provides an option to override the default consistency of gocql.Quorum.
+func WithConsistency(c gocql.Consistency) option {
+	return func(o *options) {
+		o.Consistency = c
+	}
+}
+
+// WithShard provides an option to stream only the mth-of-n subset/part/slice of the CDC streams.
+// This improves read performance as less streams are multiplexed into the reflex stream.
+func WithShard(m, n int) option {
+	return func(o *options) {
+		o.ShardM = m
+		o.ShardN = n
+	}
+}
+
+func defaultOptions() options {
+	return options{
+		Consistency: gocql.Quorum,
+	}
+}
 
 type streamID []byte
 

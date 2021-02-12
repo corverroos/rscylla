@@ -41,10 +41,10 @@ func TestStream(t *testing.T) {
 		}
 	}
 
-	cur, err := GetCursor(ctx, s, keyspace, table, time.Time{})
+	cur, err := GetCursor(ctx, s, keyspace, table, time.Time{}, WithConsistency(gocql.One))
 	jtest.RequireNil(t, err)
 
-	stream := NewStream(s, keyspace, table)
+	stream := NewStream(s, keyspace, table, WithConsistency(gocql.One))
 	sc, err := stream.Stream(ctx, cur, reflex.WithStreamLag(time.Second))
 	jtest.RequireNil(t, err)
 
@@ -69,7 +69,7 @@ func TestSmallLoad(t *testing.T) {
 	// Insert one row to get a cursor
 	insert(0, 0, 0)
 
-	cur, err := GetCursor(ctx, s, keyspace, table, time.Time{})
+	cur, err := GetCursor(ctx, s, keyspace, table, time.Time{}, WithConsistency(gocql.One))
 	jtest.RequireNil(t, err)
 
 	n := 10000
@@ -82,7 +82,7 @@ func TestSmallLoad(t *testing.T) {
 		}()
 	}
 
-	stream := NewStream(s, keyspace, table)
+	stream := NewStream(s, keyspace, table, WithConsistency(gocql.One))
 	sc, err := stream.Stream(ctx, cur, reflex.WithStreamLag(time.Second))
 	jtest.RequireNil(t, err)
 
