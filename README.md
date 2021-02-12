@@ -32,7 +32,7 @@ window and the cycle begins again.
 
 A CDC stream `EventID` consists of two parts:
  - A pointer to the row. The rows primary key.
- - A cursor the start of the time window. The generation and timestamp.
+ - A cursor to the start of the time window. The generation and timestamp.
 
 ```
 // eventID is json encoded as the reflex.EventID.
@@ -69,8 +69,8 @@ type eventID struct {
  - **Combine an unsafe 1s lag fast stream with a safe +1min sweep stream** for logic that requires 
    quick responses to events. The sweeper will pick up any missed events. #at-least-once #idempotent.    
  - **Use `GetCursor` instead of a zero cursor when streaming from the start of a stream**. 
-   A zero cursor `""` is supported but starts at the first generation timestamp of the cluster. This is
-   time the cluster was created. Streaming from this point might result in an initial delay if first events
+   A zero cursor `""` is supported but starts at the first generation timestamp of the cluster, the cluster create timestamp.
+   Streaming from this point might result in an initial delay if first events
    are long that.
    
 ### TODO
