@@ -2,6 +2,7 @@ package rscylla
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -41,6 +42,8 @@ func TestStream(t *testing.T) {
 		}
 	}
 
+	time.Sleep(time.Second)
+
 	cur, err := GetCursor(ctx, s, keyspace, table, time.Time{}, WithConsistency(gocql.One))
 	jtest.RequireNil(t, err)
 
@@ -55,7 +58,60 @@ func TestStream(t *testing.T) {
 
 		uniq[e.ForeignID] = true
 	}
+
 	require.Len(t, uniq, 6)
+}
+
+func TestShard(t *testing.T) {
+	s := setup(t)
+	ctx := context.Background()
+
+	for i := 0; i < 3; i++ {
+		for j := 0; j < 2; j++ {
+			exec(t, s, "INSERT INTO test.t (pk,ck,v) values (?,?,?);", i, j, i*j)
+		}
+	}
+
+	// TODO(corver): Use WITH TIMESTAMP above to avoid sleeping.
+	time.Sleep(time.Second * 2)
+
+	cur, err := GetCursor(ctx, s, keyspace, table, time.Time{}, WithConsistency(gocql.One))
+	jtest.RequireNil(t, err)
+
+	streamShard := func(t *testing.T, m, n int) map[string]bool {
+		stream := NewStream(s, keyspace, table, WithConsistency(gocql.One), WithShard(m, n))
+		sc, err := stream.Stream(ctx, cur, reflex.WithStreamLag(time.Second), reflex.WithStreamToHead())
+		jtest.RequireNil(t, err)
+
+		uniq := make(map[string]bool)
+		for {
+			e, err := sc.Recv()
+			if errors.Is(err, reflex.ErrHeadReached) {
+				return uniq
+			}
+			jtest.RequireNil(t, err)
+
+			uniq[e.ForeignID] = true
+		}
+	}
+
+	uniq0 := streamShard(t, 0, 3)
+	uniq1 := streamShard(t, 1, 3)
+	uniq2 := streamShard(t, 2, 3)
+
+	require.Equal(t, len(uniq0)+len(uniq1)+len(uniq2), 6)
+
+	merge := make(map[string]bool)
+	for k, v := range uniq0 {
+		merge[k] = v
+	}
+	for k, v := range uniq1 {
+		merge[k] = v
+	}
+	for k, v := range uniq2 {
+		merge[k] = v
+	}
+	require.Len(t, merge, 6)
 }
 
 func TestSmallLoad(t *testing.T) {

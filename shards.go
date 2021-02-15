@@ -3,6 +3,7 @@ package rscylla
 import (
 	"context"
 	"encoding/binary"
+	"sort"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -27,9 +28,19 @@ func shardStreams(streamIDs []streamID) [][]streamID {
 	}
 	delete(vnodes, -1)
 
-	for _, streams := range vnodes {
-		shards = append(shards, streams)
+	// Result order should be consistent.
+	var idxl []int64
+	for idx := range vnodes {
+		idxl = append(idxl, idx)
 	}
+	sort.Slice(idxl, func(i, j int) bool {
+		return idxl[i] < idxl[j]
+	})
+
+	for _, idx := range idxl {
+		shards = append(shards, vnodes[idx])
+	}
+
 	return shards
 }
 
@@ -52,13 +63,15 @@ func getVnodeIndex(streamID streamID) int64 {
 	return int64(vnodeIdx)
 }
 
-// getShards returns the shards of the generation. Shards are streamIDs grouped by virtual node index.
-func getShards(ctx context.Context, session *gocql.Session, consistency gocql.Consistency, gen time.Time) ([][]streamID, error) {
+// getShards returns a subset of shards of the generation. Shards are streamIDs grouped by virtual node index.
+// If n == 0, all shards returned.
+func getShards(ctx context.Context, session *gocql.Session, consistency gocql.Consistency, gen time.Time, m, n int) ([][]streamID, error) {
 	var streams []streamID
 	err := session.Query("SELECT streams FROM "+generationsTableName+" WHERE time = ?", gen).
 		WithContext(ctx).Consistency(consistency).Scan(&streams)
 	if err != nil {
 		return nil, err
 	}
-	return shardStreams(streams), err
+
+	return sliceShards(shardStreams(streams), m, n), err
 }

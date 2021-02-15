@@ -1,7 +1,7 @@
 # rscylla
 
 A [reflex](https://github.com/luno/reflex) stream adapter for a [scylladb](https://docs.scylladb.com/using-scylla/cdc/) CDC log table. 
-It provides at-least-once semantics*.
+It provides at-least-once semantics[*](#Limitations).
 
 ### ScyllaDB CDC Overview
 ScyllaDB CDC log tables are implemented as normal scylladb tables. 
@@ -50,7 +50,7 @@ type eventID struct {
 }
 ```
 
-### Characteristics
+### Limitations
  - **When starting a streaming from a previous `EventID`, duplicates 
    are to be expected** since the cursor points to the start of the time window, not to the 
    specific event in the time window. #at-least-once #idempotent
@@ -66,12 +66,18 @@ type eventID struct {
  - **CQL defined timestamps, `USING TIMESTAMP 123`, doesn't provide at-least-once semantics**. 
    Client defined timestamps can add events to arbitrary time windows. If the time window has
    already been streamed, that event is missed.
+ 
+ ### Features    
  - **Combine an unsafe 1s lag fast stream with a safe +1min sweep stream** for logic that requires 
-   quick responses to events. The sweeper will pick up any missed events. #at-least-once #idempotent.    
+   quick responses to events. The sweeper will pick up any missed events. 
+   Most events will be consumed twice though, so ensure idempotency. There is also a risk of concurrent
+   event consumption, since the fast stream can lag.
  - **Use `GetCursor` instead of a zero cursor when streaming from the start of a stream**. 
    A zero cursor `""` is supported but starts at the first generation timestamp of the cluster, the cluster create timestamp.
    Streaming from this point might result in an initial delay if first events
    are long that.
+ - **Use `WithShard(m,n int)` for parallel streams** to increase throughput by a factor of N. 
+ - **Use `WithConsistency()` to tune consistency vs performance**. The default is `gocql.Quorum`.
    
 ### TODO
  - Add support for base row data in the `Metadata` field depending on `type`.

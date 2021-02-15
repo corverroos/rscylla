@@ -66,8 +66,8 @@ func (s *Stream) Stream(ctx context.Context, cursorStr string,
 		opt(&o)
 	}
 
-	if o.StreamFromHead || o.StreamToHead {
-		return nil, errors.New("stream to/from head not supported yet")
+	if o.StreamFromHead {
+		return nil, errors.New("stream to head not supported yet")
 	}
 
 	var cur cursor
@@ -104,12 +104,10 @@ func (s *Stream) Stream(ctx context.Context, cursorStr string,
 				// NoReturnErr:
 				return errors.Wrap(err, "bump generation")
 			} else if ok || len(shards) == 0 {
-				shards, err = getShards(ctx, s.session, s.Consistency, cur.Generation)
+				shards, err = getShards(ctx, s.session, s.Consistency, cur.Generation, s.ShardM, s.ShardN)
 				if err != nil {
 					return errors.Wrap(err, "get shards")
 				}
-
-				shards = sliceShards(shards, s.ShardM, s.ShardN)
 			}
 
 			window := calcWindow(o.Lag)
@@ -117,6 +115,10 @@ func (s *Stream) Stream(ctx context.Context, cursorStr string,
 
 			toLag := time.Since(to)
 			if toLag < o.Lag {
+				if o.StreamToHead {
+					return reflex.ErrHeadReached
+				}
+
 				// We will query past lag. Back off a bit.
 				time.Sleep(o.Lag - toLag)
 			}
@@ -155,7 +157,7 @@ func sliceShards(shards [][]streamID, m int, n int) [][]streamID {
 
 	var res [][]streamID
 	for i, shard := range shards {
-		if n%i == m {
+		if i%n == m {
 			res = append(res, shard)
 		}
 	}
