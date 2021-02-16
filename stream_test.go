@@ -21,6 +21,8 @@ const (
 	table    = "t"
 )
 
+var z time.Time
+
 func setup(t *testing.T) *gocql.Session {
 	cluster := gocql.NewCluster("localhost")
 	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.DCAwareRoundRobinPolicy("local-dc"))
@@ -29,9 +31,9 @@ func setup(t *testing.T) *gocql.Session {
 	jtest.RequireNil(t, err)
 	t.Cleanup(s.Close)
 
-	exec(t, s, "drop keyspace if exists test")
-	exec(t, s, "create keyspace test with replication = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 };")
-	exec(t, s, "CREATE TABLE test.t (pk int, ck int, v int, PRIMARY KEY (pk, ck)) WITH cdc = {'enabled': true};")
+	exec(t, s, z, "drop keyspace if exists test")
+	exec(t, s, z, "create keyspace test with replication = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 };")
+	exec(t, s, z, "CREATE TABLE test.t (pk int, ck int, v int, PRIMARY KEY (pk, ck)) WITH cdc = {'enabled': true};")
 
 	return s
 }
@@ -42,11 +44,9 @@ func TestStream(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		for j := 0; j < 2; j++ {
-			exec(t, s, "INSERT INTO test.t (pk,ck,v) values (?,?,?);", i+10, j+100, i*j)
+			exec(t, s, time.Now().Add(-time.Second*2), "INSERT INTO test.t (pk,ck,v) values (?,?,?);", i+10, j+100, i*j)
 		}
 	}
-
-	time.Sleep(time.Second)
 
 	cur, err := GetCursor(ctx, s, keyspace, table, time.Time{}, WithConsistency(gocql.One))
 	jtest.RequireNil(t, err)
@@ -72,12 +72,9 @@ func TestShard(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		for j := 0; j < 2; j++ {
-			exec(t, s, "INSERT INTO test.t (pk,ck,v) values (?,?,?);", i, j, i*j)
+			exec(t, s, time.Now().Add(-time.Second*2), "INSERT INTO test.t (pk,ck,v) values (?,?,?);", i, j, i*j)
 		}
 	}
-
-	// TODO(corver): Use WITH TIMESTAMP above to avoid sleeping.
-	time.Sleep(time.Second * 2)
 
 	cur, err := GetCursor(ctx, s, keyspace, table, time.Time{}, WithConsistency(gocql.One))
 	jtest.RequireNil(t, err)
@@ -175,7 +172,7 @@ func TestLoad(t *testing.T) {
 
 			var inserted int64
 			insert := func(pk, cv, v int) {
-				exec(t, s, "INSERT INTO test.t (pk,ck,v) values (?,?,?);", pk, cv, v)
+				exec(t, s, z, "INSERT INTO test.t (pk,ck,v) values (?,?,?);", pk, cv, v)
 				atomic.AddInt64(&inserted, 1)
 			}
 
@@ -254,9 +251,12 @@ func TestLoad(t *testing.T) {
 	}
 }
 
-func exec(t *testing.T, session *gocql.Session, q string, args ...interface{}) {
+func exec(t *testing.T, session *gocql.Session, ts time.Time, q string, args ...interface{}) {
 	t.Helper()
-	err := session.Query(q, args...).Consistency(gocql.One).Exec()
+	if ts == z {
+		ts = time.Now()
+	}
+	err := session.Query(q, args...).WithTimestamp(ts.UnixNano() / 1000).Consistency(gocql.One).Exec()
 	jtest.RequireNil(t, err)
 }
 
