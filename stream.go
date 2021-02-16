@@ -120,7 +120,11 @@ func (s *Stream) Stream(ctx context.Context, cursorStr string,
 				}
 
 				// We will query past lag. Back off a bit.
-				time.Sleep(o.Lag - toLag)
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(o.Lag - toLag):
+				}
 			}
 
 			req := queryReq{
