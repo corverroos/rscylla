@@ -1,15 +1,15 @@
 # rscylla
 
-A [reflex](https://github.com/luno/reflex) stream adapter for a [scylladb](https://docs.scylladb.com/using-scylla/cdc/) CDC log table. 
-It provides at-least-once semantics[*](#Limitations).
+A [reflex](https://github.com/luno/reflex) stream client for a [scylladb](https://docs.scylladb.com/using-scylla/cdc/) CDC log table. 
+It provides an API for consuming scyllaDB CDC logs with at-least-once semantics[*](#Limitations).
 
 ### Usage
 
 ```
 // Define your consumer business logic
-f := func(ctx context.Context, fate fate.Fate, e *blue.Event) error {
+f := func(ctx context.Context, fate fate.Fate, e *reflex.Event) error {
   fmt.Print("Consuming scylla CDC event", e)
-  return nil
+  return fate.Tempt() // Fate injects application errors at runtime, enforcing idempotent logic.
 }
 
 // Define some more variables
@@ -27,6 +27,7 @@ cstore := rsql.NewCursorStore() // TODO(corver): Add rscyllla cursor store
 spec := reflex.NewSpec(stream.Stream, cstore, consumer)
 
 // Stream forever!
+// Progress is stored in the cursor store, so restarts or any error continue where it left off.
 for {
   err := reflex.Run(context.Backend(), spec)
   if err != nil { // Note Run always returns non-nil error
