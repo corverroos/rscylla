@@ -59,13 +59,13 @@ A reflex `EventID` is normally a point in that stream and can therefore be used 
 
 Mapping multiple streams to a single reflex stream is therefore a little different.
 
-rsylla basically sliced the CDC streams into fixed time windows that are streamed one window at a time.
+rsylla basically slices the CDC streams into fixed time windows that are streamed one window at a time.
 The start of the time window is used as the cursor, not the events themselves. 
 Once all events in the window have been streamed, the cursor is updated to the next 
 window and the cycle begins again.
 
-A CDC stream `EventID` consists of two parts:
- - A pointer to the row. The rows primary key.
+A `rscylla` `EventID` consists of two parts:
+ - A pointer to the row. The CDC log row's primary key.
  - A cursor to the start of the time window. The generation and timestamp.
 
 ```
@@ -85,7 +85,7 @@ type eventID struct {
 ```
 
 ### Limitations
- - **When starting a streaming from a previous `EventID`, duplicates 
+ - **When starting a stream from a previous `EventID`, duplicates 
    are to be expected** since the cursor points to the start of the time window, not to the 
    specific event in the time window. #at-least-once #idempotent
  - **The ordering of events in the window is not gauranteed**, but the ordering of individual 
@@ -108,8 +108,7 @@ type eventID struct {
    event consumption, since the fast stream can lag.
  - **Use `GetCursor` instead of a zero cursor when streaming from the start of a stream**. 
    A zero cursor `""` is supported but starts at the first generation timestamp of the cluster, the cluster create timestamp.
-   Streaming from this point might result in an initial delay if first events
-   are long that.
+   Streaming from this point might result in an initial delay if first events are long after that.
  - **Use `WithShard(m,n int)` for parallel streams** to increase throughput by a factor of N. 
  - **Use `WithConsistency()` to tune consistency vs performance**. The default is `gocql.Quorum`.
    
