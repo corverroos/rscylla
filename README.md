@@ -1,7 +1,8 @@
 # rscylla
 
 A [reflex](https://github.com/luno/reflex) stream client for a [scylladb](https://docs.scylladb.com/using-scylla/cdc/) CDC log table. 
-It provides an API for consuming scyllaDB CDC logs with at-least-once semantics[*](#Limitations).
+It provides an API for consuming scyllaDB CDC logs with at-least-once semantics[*](#Limitations). 
+It borrows a lot from [scylla-cdc-go](https://github.com/scylladb/scylla-cdc-go).
 
 ### Usage
 
