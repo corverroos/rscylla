@@ -36,7 +36,7 @@ func GetCursor(ctx context.Context, session *gocql.Session, keyspace, table stri
 		return "", err
 	}
 
-	shards, err := getShards(ctx, session, o.Consistency, gen, 0, 0)
+	shards, err := getShards(ctx, session, o.Consistency, gen)
 	if err != nil {
 		return "", err
 	}

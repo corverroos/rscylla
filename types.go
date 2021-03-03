@@ -31,8 +31,7 @@ const (
 )
 
 type options struct {
-	Consistency    gocql.Consistency
-	ShardM, ShardN int
+	Consistency gocql.Consistency
 }
 
 type option func(*options)
@@ -41,15 +40,6 @@ type option func(*options)
 func WithConsistency(c gocql.Consistency) option {
 	return func(o *options) {
 		o.Consistency = c
-	}
-}
-
-// WithShard provides an option to stream only the mth-of-n subset/part/slice of the CDC streams.
-// This improves read performance as less streams are multiplexed into the reflex stream.
-func WithShard(m, n int) option {
-	return func(o *options) {
-		o.ShardM = m
-		o.ShardN = n
 	}
 }
 

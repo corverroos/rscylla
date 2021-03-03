@@ -5,7 +5,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -66,55 +65,6 @@ func TestStream(t *testing.T) {
 	require.Len(t, uniq, 6)
 }
 
-func TestShard(t *testing.T) {
-	s := setup(t)
-	ctx := context.Background()
-
-	for i := 0; i < 3; i++ {
-		for j := 0; j < 2; j++ {
-			exec(t, s, time.Now().Add(-time.Second*2), "INSERT INTO test.t (pk,ck,v) values (?,?,?);", i, j, i*j)
-		}
-	}
-
-	cur, err := GetCursor(ctx, s, keyspace, table, time.Time{}, WithConsistency(gocql.One))
-	jtest.RequireNil(t, err)
-
-	streamShard := func(t *testing.T, m, n int) map[string]bool {
-		stream := NewStream(s, keyspace, table, WithConsistency(gocql.One), WithShard(m, n))
-		sc, err := stream.Stream(ctx, cur, reflex.WithStreamLag(time.Second), reflex.WithStreamToHead())
-		jtest.RequireNil(t, err)
-
-		uniq := make(map[string]bool)
-		for {
-			e, err := sc.Recv()
-			if errors.Is(err, reflex.ErrHeadReached) {
-				return uniq
-			}
-			jtest.RequireNil(t, err)
-
-			uniq[e.ForeignID] = true
-		}
-	}
-
-	uniq0 := streamShard(t, 0, 3)
-	uniq1 := streamShard(t, 1, 3)
-	uniq2 := streamShard(t, 2, 3)
-
-	require.Equal(t, len(uniq0)+len(uniq1)+len(uniq2), 6)
-
-	merge := make(map[string]bool)
-	for k, v := range uniq0 {
-		merge[k] = v
-	}
-	for k, v := range uniq1 {
-		merge[k] = v
-	}
-	for k, v := range uniq2 {
-		merge[k] = v
-	}
-	require.Len(t, merge, 6)
-}
-
 var load = flag.Bool("load", false, "Enable slow load tests")
 
 func TestLoad(t *testing.T) {
@@ -124,11 +74,10 @@ func TestLoad(t *testing.T) {
 	}
 
 	tests := []struct {
-		Name       string
-		Insert     int
-		Inserters  int
-		WaitFor    int64
-		ReadShards int
+		Name      string
+		Insert    int
+		Inserters int
+		WaitFor   int64
 	}{
 		{
 			Name:      "small_no_wait",
@@ -146,22 +95,15 @@ func TestLoad(t *testing.T) {
 			Inserters: 1000,
 			WaitFor:   100000,
 		}, {
-			Name:       "medium_wait_4",
-			Insert:     100000,
-			Inserters:  1000,
-			WaitFor:    100000,
-			ReadShards: 4,
+			Name:      "medium_wait_4",
+			Insert:    100000,
+			Inserters: 1000,
+			WaitFor:   100000,
 		}, {
 			Name:      "large_wait",
 			Insert:    1000000,
 			Inserters: 1000,
 			WaitFor:   1000000,
-		}, {
-			Name:       "large_wait_4",
-			Insert:     1000000,
-			Inserters:  1000,
-			WaitFor:    1000000,
-			ReadShards: 4,
 		},
 	}
 
@@ -206,47 +148,28 @@ func TestLoad(t *testing.T) {
 			}
 			log("Starting read", atomic.LoadInt64(&inserted))
 
-			n := test.ReadShards
-			if n == 0 {
-				n = 1
-			}
+			var read int64
 
-			var (
-				wg   sync.WaitGroup
-				read int64
-			)
-			wg.Add(n)
-			log = mark()
-			ctx, cancel := context.WithCancel(ctx)
-			for m := 0; m < n; m++ {
-				go func(m int) {
-					stream := NewStream(s, keyspace, table, WithConsistency(gocql.One), WithShard(m, n))
-					sc, err := stream.Stream(ctx, cur, reflex.WithStreamLag(time.Second))
-					jtest.RequireNil(t, err)
+			stream := NewStream(s, keyspace, table, WithConsistency(gocql.One))
+			sc, err := stream.Stream(ctx, cur, reflex.WithStreamLag(time.Second))
+			jtest.RequireNil(t, err)
 
-					// Read all the rows.
-					log := mark()
-					var c int64
-					for {
-						_, err := sc.Recv()
-						if errors.Is(err, context.Canceled) {
-							break
-						}
-						jtest.RequireNil(t, err)
-						atomic.AddInt64(&read, 1)
-						c++
-					}
-					log("Ended read "+fmt.Sprint(m), c)
-					wg.Done()
-				}(m)
+			// Read all the rows.
+			var c int64
+			for {
+				_, err := sc.Recv()
+				if errors.Is(err, context.Canceled) {
+					break
+				}
+				jtest.RequireNil(t, err)
+				atomic.AddInt64(&read, 1)
+				c++
 			}
 
 			for atomic.LoadInt64(&read) < int64(test.Insert) {
 				time.Sleep(time.Millisecond * 100)
 			}
 			log("Ended read total", int64(test.Insert))
-			cancel()
-			wg.Wait()
 		})
 	}
 }

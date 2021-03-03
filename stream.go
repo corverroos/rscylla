@@ -104,7 +104,7 @@ func (s *Stream) Stream(ctx context.Context, cursorStr string,
 				// NoReturnErr:
 				return errors.Wrap(err, "bump generation")
 			} else if ok || len(shards) == 0 {
-				shards, err = getShards(ctx, s.session, s.Consistency, cur.Generation, s.ShardM, s.ShardN)
+				shards, err = getShards(ctx, s.session, s.Consistency, cur.Generation)
 				if err != nil {
 					return errors.Wrap(err, "get shards")
 				}
@@ -151,21 +151,6 @@ func (s *Stream) Stream(ctx context.Context, cursorStr string,
 	}()
 
 	return sc, nil
-}
-
-// sliceShards returns a consistent mth-of-n subset of shards.
-func sliceShards(shards [][]streamID, m int, n int) [][]streamID {
-	if n < 2 {
-		return shards
-	}
-
-	var res [][]streamID
-	for i, shard := range shards {
-		if i%n == m {
-			res = append(res, shard)
-		}
-	}
-	return res
 }
 
 // maybeBumpGeneration returns either the provided cursor and false or

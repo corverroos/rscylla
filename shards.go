@@ -63,9 +63,8 @@ func getVnodeIndex(streamID streamID) int64 {
 	return int64(vnodeIdx)
 }
 
-// getShards returns a subset of shards of the generation. Shards are streamIDs grouped by virtual node index.
-// If n == 0, all shards returned.
-func getShards(ctx context.Context, session *gocql.Session, consistency gocql.Consistency, gen time.Time, m, n int) ([][]streamID, error) {
+// getShards returns a all shards of the generation. Shards are streamIDs grouped by virtual node index.
+func getShards(ctx context.Context, session *gocql.Session, consistency gocql.Consistency, gen time.Time) ([][]streamID, error) {
 	var streams []streamID
 	err := session.Query("SELECT streams FROM "+generationsTableName+" WHERE time = ?", gen).
 		WithContext(ctx).Consistency(consistency).Scan(&streams)
@@ -73,5 +72,5 @@ func getShards(ctx context.Context, session *gocql.Session, consistency gocql.Co
 		return nil, err
 	}
 
-	return sliceShards(shardStreams(streams), m, n), err
+	return shardStreams(streams), err
 }
