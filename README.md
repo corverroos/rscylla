@@ -110,7 +110,6 @@ type eventID struct {
  - **Use `GetCursor` instead of a zero cursor when streaming from the start of a stream**. 
    A zero cursor `""` is supported but starts at the first generation timestamp of the cluster, the cluster create timestamp.
    Streaming from this point might result in an initial delay if first events are long after that.
- - **Use `WithShard(m,n int)` for parallel streams** to increase throughput by a factor of N. 
  - **Use `WithConsistency()` to tune consistency vs performance**. The default is `gocql.Quorum`.
    
 ### TODO
